@@ -13,7 +13,7 @@ func SetupRouter() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{
 			"message" : "Greetings!",
 		})
-	})	
+	})
 	return r
 }
 
