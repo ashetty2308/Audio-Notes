@@ -23,14 +23,24 @@ func SetupRouter() *gin.Engine {
 		})
 	})
 	// post endpoint
-	r.POST("/post", func(c *gin.Context) {
+	r.POST("/upload", func(c *gin.Context) {
+		
+		// get file 
+		file, err := c.FormFile("file")
+		if err != nil {
+			fmt.Printf("Error reading file: ", err)
+		}
+		fmt.Println("Uploaded File: ", file.Filename)
+		fmt.Println("Uploaded File: ", file.Size)
+
+
 		newNote := models.Note{
-			ID: 3,
+			ID: len(notes) + 1,
 			FilePath: "temporary/file/path",
 			Title: "My New Note!",
 			UploadTime: time.Now(),
 		}
-		notes = append(notes, newNote)
+		notes = append(notes, newNote)	
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Successfully created a new note!",
 			"note": newNote,
