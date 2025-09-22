@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 )
 
-func SetupRouter(uploader *manager.Uploader) *gin.Engine {
+func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 	r := gin.Default()
 
 	// create slice of notes
@@ -73,6 +73,23 @@ func SetupRouter(uploader *manager.Uploader) *gin.Engine {
 			"note":    newNote,
 		})
 	})
+	r.GET("/bucket-files", func(c *gin.Context) {
+		paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
+			Bucket: aws.String("s3-golang-uploaded-pdfs"),
+		})
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(context.TODO())
+			if err != nil {
+				fmt.Print("Error! ", err)
+			}
+			// prints out bucket name
+			log.Printf("Bucket Name: ", *page.Name)
+			for index, item := range page.Contents {
+				// item.Key is a pointer to the string, so need to deref
+				fmt.Println(index, *item.Key)
+			}
+		}
+	})
 	r.GET("/all_notes", func(c *gin.Context) {
 		for i:=0; i < len(notes); i++ {
 			note := notes[i]
@@ -115,6 +132,6 @@ func main() {
 	uploader := manager.NewUploader(client)
 
 
-	r := SetupRouter(uploader)
+	r := SetupRouter(uploader, client)
 	r.Run(":3000")
 }
