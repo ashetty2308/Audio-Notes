@@ -1,18 +1,22 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"net/http"
 	"audio-notes/models"
-	"time"
-	"fmt"
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
-	"github.com/joho/godotenv"
-    "github.com/aws/aws-sdk-go-v2/aws"
-    "github.com/aws/aws-sdk-go-v2/config"
-    "github.com/aws/aws-sdk-go-v2/service/s3"
+	"net/http"
+	"os"
+	"time"
+	"encoding/base64"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
@@ -98,6 +102,67 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{
 			"notes": notes,
 		})
+	})
+	r.GET("/narrate-notes", func(c *gin.Context) {
+		/*
+			- Make a request with URL to eleven labs
+			- Add headers to API call (xi-api-key), voice_id
+		*/
+		headers := http.Header{}
+		headers.Add("xi-api-key", os.Getenv("ELEVEN_LABS_KEY"))
+		// pass in voice id to the api; used GET endpoint from docs
+		url := fmt.Sprintf("wss://api.elevenlabs.io/v1/text-to-speech/%s/stream-input", "29vD33N1CtxCmqQRPOHJ")
+		// Dial returns connection, response (optional, we don't need as of now - can use to inspect headers, other handshake elements), and an error
+		connection, _, err := websocket.DefaultDialer.Dial(url, headers)
+		if err != nil {
+			fmt.Println("Error establishing connection to ElevenLabs WebSocket", err)
+		}
+
+		testJson := map[string]interface{} {
+			"type" : "sendText",
+			"text" : "Hello World!",
+			"flush" : true,
+		}
+		// reassigning so we can omit the :
+		err = connection.WriteJSON(testJson)
+		if err != nil {
+			fmt.Println("Error writing json to server: ", err)
+		}
+
+		for {
+			// omitted (_) is messageType an integer
+			// tells us what type of message was received (ping, pong, binary, text, close)
+			_, bytes, err := connection.ReadMessage()
+			if err != nil {
+				fmt.Println("Connection esablished, but error reading message: ", err)
+				break
+			}
+			// we declare a map to hold the decoded string coming back from our api request
+			var audioResponseMapping map[string]interface{}
+			// unmarshal: takes array of bytes and destination (pointer) to where it needs to be stored 
+			err = json.Unmarshal(bytes, &audioResponseMapping)
+			if err != nil {
+				fmt.Println("Error unmarshalling: ", err)
+			}
+			// base64 decoded string representing our audio
+			// when we unmarshall, every value in the mapping becomes of type interface{}, so we need to assert it as a string
+			audioDecodedString, ok := audioResponseMapping["audio"].(string)
+			if !ok {
+				fmt.Println("Decoded Output is not a string: ", ok)
+			}
+			decodedByteResponse, err := base64.StdEncoding.DecodeString(audioDecodedString)
+			if err != nil {
+				fmt.Println("Error when trying to decode the base64 output")
+			}
+			err = os.WriteFile("testing.mp3", decodedByteResponse, 0100644)
+			if err != nil {
+				fmt.Println("Error saving file!", err)
+			}
+		}
+		
+
+		// defer will inherently close the connection once our callback function is complete, so we don't have to remember about it
+		defer connection.Close()
 	})
 	return r
 }
