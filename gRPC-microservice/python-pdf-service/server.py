@@ -4,15 +4,17 @@ import grpc
 from concurrent import futures
 import os
 import boto3
+import fitz
+from io import BytesIO
 
-
-def get_bucket_and_file_name(url):
+def get_bucket_key_filetype(url):
         prefix = "s3://"
         # postfix will represent bucket/filepath/as/in/bucket
         postfix = url[len(prefix):]
         # maxsplit = 1 here since we only want to split once into 2 buckets, key and file (could be nested file structure)
         bucket, key = postfix.split("/", 1)
-        return bucket, key
+        filetype = key.split('.', 1)[1]
+        return bucket, key, filetype
 
 class TextExtractionService(service_definition_pb2_grpc.TextExtractionServiceServicer):
             
@@ -20,10 +22,15 @@ class TextExtractionService(service_definition_pb2_grpc.TextExtractionServiceSer
         s3_url = request.s3_url
         if not s3_url.startswith("s3://"):
             raise ValueError("Invalid url! (doesn't begin with correct s3:// path)")
-        bucket, key = get_bucket_and_file_name(s3_url)
+        bucket, key, filetype = get_bucket_key_filetype(s3_url)
+        print(bucket, key, filetype)
         s3 = boto3.client('s3')
-        concat = bucket + ", " + key
-        return service_definition_pb2.ExtractTextResponse(extracted_text=concat)
+        file_bytes = s3.get_object(Bucket=bucket, Key=key)['Body'].read()
+        with fitz.open(stream=BytesIO(file_bytes), filetype=filetype) as notes:
+            text = ""
+            for page in notes:
+                text += page.get_text()
+        return service_definition_pb2.ExtractTextResponse(extracted_text=text)
       
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
