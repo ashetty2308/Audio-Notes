@@ -137,9 +137,7 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 		})
 		if err != nil {
 			fmt.Println("Error making request: ", err)
-		}
-		fmt.Println(req.ExtractedText)
-		
+		}		
 
 		testJson := map[string]interface{} {
 			"type" : "sendText",
