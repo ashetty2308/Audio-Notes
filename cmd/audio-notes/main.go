@@ -1,15 +1,17 @@
 package main
 
 import (
+	pb "audio-notes/go-source"
 	"audio-notes/models"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
-	"encoding/base64"
+	"google.golang.org/grpc/credentials/insecure"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
@@ -17,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
 )
 
 func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
@@ -118,9 +121,27 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 			fmt.Println("Error establishing connection to ElevenLabs WebSocket", err)
 		}
 
+		// call the Python server with a URL to the S3 file
+		// get response
+		// feeed into eleven labs api
+		// test - s3://s3-golang-uploaded-pdfs/Biology Notes.pdf
+
+		conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Println("Error establishing connection with client! ", err)
+		}
+		defer conn.Close()
+		client := pb.NewTextExtractionServiceClient(conn)
+		req, err := client.ExtractText(context.Background(), &pb.ExtractTextRequest{
+			S3Url: "s3://s3-golang-uploaded-pdfs/Biology Notes.pdf",
+		})
+		if err != nil {
+			fmt.Println("Error making request: ", err)
+		}		
+
 		testJson := map[string]interface{} {
 			"type" : "sendText",
-			"text" : "Hello World!",
+			"text" : req.ExtractedText,
 			"flush" : true,
 		}
 		// reassigning so we can omit the :
