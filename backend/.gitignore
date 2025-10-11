@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+*.env
+*.env.*          
+
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# VSCode / editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# macOS
+*.DS_Store
+
+# virtual environment (virt)
+virt/
+
+# audio files
+.mp3
