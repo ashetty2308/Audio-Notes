@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 	"google.golang.org/grpc/credentials/insecure"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -24,6 +23,16 @@ import (
 
 func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 	r := gin.Default()
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
 
 	// create slice of notes
 	var notes []models.Note
@@ -69,9 +78,7 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 		// Save note info
 		newNote := models.Note{
 			ID:         len(notes) + 1,
-			FilePath:   result.Location, // use S3 URL
 			Title:      "My New Note!",
-			UploadTime: time.Now(),
 		}
 		notes = append(notes, newNote)
 
@@ -81,6 +88,7 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 		})
 	})
 	r.GET("/bucket-files", func(c *gin.Context) {
+		var notes []models.Note
 		paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
 			Bucket: aws.String("s3-golang-uploaded-pdfs"),
 		})
@@ -89,13 +97,15 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 			if err != nil {
 				fmt.Print("Error! ", err)
 			}
-			// prints out bucket name
-			log.Printf("Bucket Name: ", *page.Name)
 			for index, item := range page.Contents {
-				// item.Key is a pointer to the string, so need to deref
-				fmt.Println(index, *item.Key)
+				note := models.Note{
+					ID: index + 1,
+					Title: *item.Key,
+				}
+				notes = append(notes, note)
 			}
 		}
+		c.JSON(http.StatusOK, notes)
 	})
 	r.GET("/all_notes", func(c *gin.Context) {
 		for i:=0; i < len(notes); i++ {
