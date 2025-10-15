@@ -19,7 +19,19 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
+	"math"
 )
+
+
+func chunkText(text string, chunkSize int) []string {
+	var chunks []string
+	for i := 0; i < len(text); i += chunkSize {
+		end := math.Min(float64(len(text)), float64(i + chunkSize))
+		chunk_i := text[i : int(end)]
+		chunks = append(chunks, chunk_i)
+	}
+	return chunks
+}
 
 func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 	r := gin.Default()
@@ -117,25 +129,6 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 		})
 	})
 	r.GET("/narrate-notes", func(c *gin.Context) {
-		/*
-			- Make a request with URL to eleven labs
-			- Add headers to API call (xi-api-key), voice_id
-		*/
-		headers := http.Header{}
-		headers.Add("xi-api-key", os.Getenv("ELEVEN_LABS_KEY"))
-		// pass in voice id to the api; used GET endpoint from docs
-		url := fmt.Sprintf("wss://api.elevenlabs.io/v1/text-to-speech/%s/stream-input", "29vD33N1CtxCmqQRPOHJ")
-		// Dial returns connection, response (optional, we don't need as of now - can use to inspect headers, other handshake elements), and an error
-		connection, _, err := websocket.DefaultDialer.Dial(url, headers)
-		if err != nil {
-			fmt.Println("Error establishing connection to ElevenLabs WebSocket", err)
-		}
-
-		// call the Python server with a URL to the S3 file
-		// get response
-		// feeed into eleven labs api
-		// test - s3://s3-golang-uploaded-pdfs/Biology Notes.pdf
-
 		conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			fmt.Println("Error establishing connection with client! ", err)
@@ -147,18 +140,35 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 		})
 		if err != nil {
 			fmt.Println("Error making request: ", err)
-		}		
-		fmt.Println(req.ExtractedText)
-		testJson := map[string]interface{} {
-			"type" : "sendText",
-			"text" : req.ExtractedText,
-			"flush" : true,
 		}
-		// reassigning so we can omit the :
-		err = connection.WriteJSON(testJson)
+		headers := http.Header{}
+		headers.Add("xi-api-key", os.Getenv("ELEVEN_LABS_KEY"))
+		url := fmt.Sprintf("wss://api.elevenlabs.io/v1/text-to-speech/%s/stream-input", "29vD33N1CtxCmqQRPOHJ")
+		connection, _, err := websocket.DefaultDialer.Dial(url, headers)
 		if err != nil {
-			fmt.Println("Error writing json to server: ", err)
+			fmt.Println("Error establishing connection to ElevenLabs WebSocket", err)
 		}
+		chunks := chunkText(req.ExtractedText, 250)
+		for _, chunk := range chunks {
+			testJson := map[string]interface{} {
+				"type" : "sendText",
+				"text" : chunk,
+				"flush" : true,
+			}
+			err = connection.WriteJSON(testJson)
+			if err != nil {
+				fmt.Println("Error writing json to server: ", err)
+			}
+		}
+		connection.WriteJSON(map[string]interface{} {
+			"type": "flush",
+		})
+		file, err := os.OpenFile("audio.mp3", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0644)
+		if err != nil {
+			fmt.Println("Error opening up the file: ", err)
+			return
+		}
+		defer file.Close()
 
 		for {
 			// omitted (_) is messageType an integer
@@ -185,10 +195,11 @@ func SetupRouter(uploader *manager.Uploader, s3Client *s3.Client) *gin.Engine {
 			if err != nil {
 				fmt.Println("Error when trying to decode the base64 output")
 			}
-			err = os.WriteFile("testing.mp3", decodedByteResponse, 0100644)
-			if err != nil {
-				fmt.Println("Error saving file!", err)
-			}
+			_, err = file.Write(decodedByteResponse)
+			// err = os.WriteFile("testing.mp3", decodedByteResponse, 0100644)
+			// if err != nil {
+			// 	fmt.Println("Error saving file!", err)
+			// }
 		}
 		
 

@@ -6,6 +6,11 @@ import os
 import boto3
 import fitz
 from io import BytesIO
+from transformers import pipeline
+from dotenv import load_dotenv
+from pathlib import Path
+
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn", device=-1)
 
 def get_bucket_key_filetype(url):
     prefix = "s3://"
@@ -15,6 +20,10 @@ def get_bucket_key_filetype(url):
     bucket, key = postfix.split("/", 1)
     filetype = key.split('.', 1)[1]
     return bucket, key, filetype
+
+def summarize_text(all_text):
+    result = summarizer(all_text, max_length=100, min_length=20, do_sample=False)
+    return result[0]["summary_text"]
 
 class TextExtractionService(service_definition_pb2_grpc.TextExtractionServiceServicer):
     def ExtractText(self, request, context):
@@ -28,7 +37,7 @@ class TextExtractionService(service_definition_pb2_grpc.TextExtractionServiceSer
             text = ""
             for page in notes:
                 text += page.get_text()
-        return service_definition_pb2.ExtractTextResponse(extracted_text=text)
+        return service_definition_pb2.ExtractTextResponse(extracted_text=summarize_text(text))
       
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
