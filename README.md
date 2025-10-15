@@ -1,4 +1,4 @@
-Overview
+
 
 One of my favorite hobbies is to go on walks and explore new areas around me. While extremely fun, it does take some time away from school + studying. Consequently, I thought it would be useful to build a tool that can transcribe my notes into a real-time audio narration so that I can review material while voyaging.
 
