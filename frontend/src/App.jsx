@@ -8,7 +8,11 @@ function App() {
   const [audioURL, setAudioURL] = useState(null);
   const [loading, setLoading] = useState(null);
   const [bucketFiles, setBucketFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
 
+  const updateSelectedFile = (newFile) => {
+    setSelectedFile(newFile);
+  }
   
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
@@ -44,9 +48,24 @@ function App() {
         </div>
       )}
       <h3>Bucket Files</h3>
-      <ul>
+      <ul style={{ listStyle: 'none', padding: 0}}>
       {bucketFiles.map((file) => (
-        <li key={file.id}>{file.title}</li>
+        <li 
+          key={file.id}
+          onClick={() => updateSelectedFile(file)}
+          style={{
+            cursor: 'pointer',
+            padding: '0.5rem',
+            border: '1px solid #ccc',
+            borderRadius: '8px',
+            marginBottom: '0.5rem',
+            backgroundColor:
+            selectedFile?.id === file.id ? '#d1e7ff' : 'white',
+            transition: 'background-color 0.15s ease',
+          }}
+        >
+          {file.title}
+        </li>
       ))}
     </ul>
     </div>
